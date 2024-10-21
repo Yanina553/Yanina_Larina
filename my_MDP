@@ -1,0 +1,92 @@
+# Задача: обучить агента играть в игру "Крестики-нолики".
+# Пространство состояний: все возможные конфигурации игрового поля. Пространство действий: все возможные ходы (поставить крестик или нолик). Функция вознаграждения: +1 за победу, -1 за проигрыш, 0 за ничью. Функция перехода: определяет вероятность перехода из одного состояния в другое после выполнения действия.
+# Метод решения: Q-обучение.
+
+
+import numpy as np
+import random
+
+class TicTacToe:
+    def __init__(self):
+        self.board = np.zeros((3, 3))  # 0 - пустая клетка, 1 - крестик, -1 - нолик
+
+    def reset(self):
+        self.board = np.zeros((3, 3))
+
+    def available_actions(self):
+        return list(zip(*np.where(self.board == 0)))
+
+    def make_move(self, action, player):
+        self.board[action] = player
+
+    def check_winner(self):
+        for player in [1, -1]:
+            # Проверка строк, столбцов и диагоналей
+            if any(np.all(self.board[i, :] == player) for i in range(3)) or \
+               any(np.all(self.board[:, j] == player) for j in range(3)) or \
+               np.all(np.diagonal(self.board) == player) or \
+               np.all(np.diagonal(np.fliplr(self.board)) == player):
+                return player
+        if len(self.available_actions()) == 0:
+            return 0  # Ничья
+        return None  # Игра продолжается
+
+class QLearningAgent:
+    def __init__(self, learning_rate=0.1, discount_factor=0.9, exploration_rate=1.0):
+        self.q_table = {}
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.exploration_rate = exploration_rate
+
+    def get_q_value(self, state, action):
+        return self.q_table.get((state.tobytes(), action), 0.0)
+
+    def choose_action(self, state):
+        if random.random() < self.exploration_rate:
+            return random.choice(state.available_actions())
+        else:
+            q_values = [self.get_q_value(state.board, action) for action in state.available_actions()]
+            max_q_value = max(q_values)
+            max_actions = [action for action in state.available_actions() if self.get_q_value(state.board, action) == max_q_value]
+            return random.choice(max_actions)
+
+    def learn(self, state, action, reward, next_state):
+        current_q = self.get_q_value(state.board, action)
+        max_future_q = max([self.get_q_value(next_state.board, a) for a in next_state.available_actions()] + [0])
+        new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_future_q - current_q)
+        self.q_table[(state.board.tobytes(), action)] = new_q
+
+def train_agent(num_episodes=100):
+    agent = QLearningAgent()
+    game = TicTacToe()
+
+    for episode in range(num_episodes):
+        game.reset()
+        state = game
+        done = False
+
+        while not done:
+            action = agent.choose_action(state)
+            state.make_move(action, 1)  # Агент всегда играет крестиком
+
+            winner = state.check_winner()
+            if winner is not None:
+                reward = 1 if winner == 1 else -1 if winner == -1 else 0
+                agent.learn(state, action, reward, state)
+                done = True
+                print(f"Episode {episode + 1}: Agent wins!" if winner == 1 else f"Episode {episode + 1}: Agent loses!" if winner == -1 else f"Episode {episode + 1}: It's a draw!")
+                continue
+            
+            # Ход противника (случайный)
+            opponent_action = random.choice(state.available_actions())
+            state.make_move(opponent_action, -1)
+
+            winner = state.check_winner()
+            if winner is not None:
+                reward = 1 if winner == 1 else -1 if winner == -1 else 0
+                agent.learn(state, action, reward, state)
+                done = True
+                print(f"Episode {episode + 1}: Agent wins!" if winner == 1 else f"Episode {episode + 1}: Agent loses!" if winner == -1 else f"Episode {episode + 1}: It's a draw!")
+
+# Запуск обучения агента
+train_agent()
